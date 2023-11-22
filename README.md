@@ -186,3 +186,421 @@ curl -X GET -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IkQyNzY4NkVDOT
 ## Demo 3
 
 Now let's create a MVC web application called `Weather.MVC` that accesses the protected Weather.API endpoint by requesting a token from Identity Server.
+
+In my case, `Weather.MVC` web app is running on port 7267.
+
+Open `Program.cs` and add the following code:
+
+```cs
+var builder = WebApplication.CreateBuilder(args);
+
+// add this
+builder.Services.AddHttpClient();
+```
+
+Create `WeatherData.cs` file in `Models` folder:
+
+```cs
+namespace Weather.MVC.Models;
+
+public class WeatherData
+{
+    public DateTime Date { get; set; }
+    public int TemperatureC { get; set; }
+    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+    public string Summary { get; set; }
+}
+```
+
+Open `HomeController.cs` and edit the code to the following:
+
+```cs
+using Microsoft.AspNetCore.Mvc;
+using System.Diagnostics;
+using System.Text.Json;
+using Weather.MVC.Models;
+
+namespace Weather.MVC.Controllers;
+
+public class HomeController : Controller
+{
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<HomeController> _logger;
+
+    public HomeController(IHttpClientFactory httpClientFactory, ILogger<HomeController> logger)
+    {
+        _httpClientFactory = httpClientFactory;
+        _logger = logger;
+    }
+
+    public IActionResult Index()
+    {
+        return View();
+    }
+
+    public IActionResult Privacy()
+    {
+        return View();
+    }
+
+    public async Task<IActionResult> Weather()
+    {
+        var httpClient = _httpClientFactory.CreateClient();
+
+        var httpResponseMessage = await httpClient.GetAsync("https://localhost:7074/weatherforecast");
+        if (httpResponseMessage.IsSuccessStatusCode)
+        {
+            using var contentStream = await httpResponseMessage.Content.ReadAsStreamAsync();
+            var result = await JsonSerializer.DeserializeAsync<IEnumerable<WeatherData>>(contentStream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return View(result);
+        }
+
+        throw new Exception("Unable to get content");
+    }
+
+    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+    public IActionResult Error()
+    {
+        return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+    }
+}
+```
+
+Under `View/Home/` folder, create `Weather.cshtml` and add the following:
+
+```html
+@model IEnumerable<WeatherData>
+@{
+    ViewData["Title"] = "Weather Page";
+}
+
+<h2>Weather</h2>
+
+<table>
+    @foreach (var item in Model)
+    {
+        <tr>
+            <td>@item.Date</td>
+            <td>@item.Summary</td>
+            <td>@item.TemperatureC</td>
+            <td>@item.TemperatureF</td>
+        </tr>
+    }
+</table>
+```
+
+To test that the MVC webapp is able to hit the API endpoint, open `WeatherForecastController.cs` in the `Weather.API` project and comment out `[Authorize]` attribute.
+
+Configure startup projects to include `Weather.MVC`.
+Start the applications and go to <https://localhost:7267/home/weather>.
+You should see the Weather table.
+
+Now let's uncomment `[Authorize]` attribute in `WeatherForecastController.cs` file.
+If we try to access <https://localhost:7267/home/weather>, we will now hit an exception.
+Let's now fix that.
+
+First, install `IdentityModel` nuget package.
+
+```shell
+# install using pmc
+Install-Package IdentityModel -Version 6.2.0
+
+# uninstall using pmc
+Uninstall-Package IdentityModel
+```
+
+In `Weather.MVC` web application, add a new folder `Services`.
+Then add files `IdentityServerSettings.cs`, `ITokenService.cs` and `TokenService.cs`.
+
+IdentityServerSettings.cs
+
+```cs
+namespace Weather.MVC.Services;
+
+public class IdentityServerSettings
+{
+    public string DiscoveryUrl { get; set; } = string.Empty;
+    public string ClientId { get; set; } = string.Empty;
+    public string ClientPassword { get; set; } = string.Empty;
+    public bool UseHttps { get; set; }
+}
+```
+
+ITokenService.cs
+
+```cs
+using IdentityModel.Client;
+
+namespace Weather.MVC.Services;
+
+public interface ITokenService
+{
+    Task<TokenResponse> GetTokenAsync(string scope);
+}
+```
+
+TokenService.cs
+
+```cs
+using IdentityModel.Client;
+using Microsoft.Extensions.Options;
+
+namespace Weather.MVC.Services;
+
+public class TokenService : ITokenService
+{
+    private readonly ILogger<TokenService> _logger;
+    private readonly IOptions<IdentityServerSettings> _identityServerSettings;
+    private readonly DiscoveryDocumentResponse _discoveryDocument;
+
+    public TokenService(ILogger<TokenService> logger, IOptions<IdentityServerSettings> identityServerSettings)
+    {
+        _logger = logger;
+        _identityServerSettings = identityServerSettings;
+
+        using var httpClient = new HttpClient();
+        _discoveryDocument = httpClient.GetDiscoveryDocumentAsync(identityServerSettings.Value.DiscoveryUrl).Result;
+        if (_discoveryDocument.IsError)
+        {
+            _logger.LogError("Unable to get discovery document. Error is {Error}", _discoveryDocument.Error);
+            throw new Exception("Unable to get discovery document", _discoveryDocument.Exception);
+        }
+    }
+
+    public async Task<TokenResponse> GetTokenAsync(string scope)
+    {
+        using var client = new HttpClient();
+        var tokenResponse = await client.RequestClientCredentialsTokenAsync(new ClientCredentialsTokenRequest
+        {
+            Address = _discoveryDocument.TokenEndpoint,
+
+            ClientId = _identityServerSettings.Value.ClientId,
+            ClientSecret = _identityServerSettings.Value.ClientPassword,
+            Scope = scope
+        });
+
+        if (tokenResponse.IsError)
+        {
+            _logger.LogError("Unable to get token. Error is {Error}", tokenResponse.Error);
+            throw new Exception("Unable to get token", tokenResponse.Exception);
+        }
+
+        return tokenResponse;
+    }
+}
+```
+
+Open `appsettings.json` (or better yet, use user secrets `secrets.json`)
+and add the following configuration
+
+```json
+{
+  "IdentityServerSettings": {
+    "DiscoveryUrl": "https://localhost:5001",
+    "ClientId": "m2m.client",
+    "ClientPassword": "511536EF-F270-4058-80CA-1C89C192F69A",
+    "UseHttps": true
+  },
+}
+```
+
+Open `Program.cs` and add the following:
+
+```cs
+builder.Services.AddHttpClient();
+// begin add
+builder.Services.Configure<IdentityServerSettings>(builder.Configuration.GetSection(nameof(IdentityServerSettings)));
+builder.Services.AddSingleton<ITokenService, TokenService>();
+// end add
+```
+
+Open `HomeController.cs` and edit to the following:
+
+```cs
+using IdentityModel.Client;
+using Microsoft.AspNetCore.Mvc;
+using System.Diagnostics;
+using System.Text.Json;
+using Weather.MVC.Models;
+using Weather.MVC.Services;
+
+namespace Weather.MVC.Controllers;
+
+public class HomeController : Controller
+{
+    private readonly ITokenService _tokenService;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<HomeController> _logger;
+
+    public HomeController(ITokenService tokenService, IHttpClientFactory httpClientFactory, ILogger<HomeController> logger)
+    {
+        _tokenService = tokenService;
+        _httpClientFactory = httpClientFactory;
+        _logger = logger;
+    }
+
+    public IActionResult Index()
+    {
+        return View();
+    }
+
+    public IActionResult Privacy()
+    {
+        return View();
+    }
+
+    public async Task<IActionResult> Weather()
+    {
+        var httpClient = _httpClientFactory.CreateClient();
+
+        var token = await _tokenService.GetTokenAsync("scope1");
+        if (token.AccessToken != null)
+        {
+            httpClient.SetBearerToken(token.AccessToken);
+        }
+
+        var httpResponseMessage = await httpClient.GetAsync("https://localhost:7074/weatherforecast");
+        if (httpResponseMessage.IsSuccessStatusCode)
+        {
+            using var contentStream = await httpResponseMessage.Content.ReadAsStreamAsync();
+            var result = await JsonSerializer.DeserializeAsync<IEnumerable<WeatherData>>(contentStream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return View(result);
+        }
+
+        throw new Exception("Unable to get content");
+    }
+
+    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+    public IActionResult Error()
+    {
+        return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+    }
+}
+```
+
+So now we are able to access the protected weather api endpoint from our weather mvc web application.
+However, the MVC web application is not protected.
+
+To protect `Weather.MVC` MVC web application, add `[Authorize]` attribute to the Weather action method in `HomeController.cs` file.
+
+Then open `appsettings.json` file in the mvc app and add the following configuration
+
+```json
+{
+  "InteractiveServiceSettings": {
+    "AuthorityUrl": "https://localhost:5001",
+    "ClientId": "interactive",
+    "ClientSecret": "49C1A7E1-0C79-4A89-A3D6-A37998FB86B0",
+    "Scopes": [
+      "scope1"
+    ]
+  },
+}
+```
+
+Open `Config.cs` file in `Duende.IdentityServer.InMemory` add edit the ports for the interactive client to match the port of the MVC web app (port 7267). Also, make sure `scope1` is included in the AllowedScopes:
+
+Config.cs
+
+```cs
+// interactive client using code flow + pkce
+new Client
+{
+    ClientId = "interactive",
+    ClientSecrets = { new Secret("49C1A7E1-0C79-4A89-A3D6-A37998FB86B0".Sha256()) },
+        
+    AllowedGrantTypes = GrantTypes.Code,
+
+    // change ports to 7267 (so it matches the port of the MVC web app)
+    RedirectUris = { "https://localhost:7267/signin-oidc" },
+    FrontChannelLogoutUri = "https://localhost:7267/signout-oidc",
+    PostLogoutRedirectUris = { "https://localhost:7267/signout-callback-oidc" },
+
+    AllowOfflineAccess = true,
+    AllowedScopes = { "openid", "profile", "scope1" }
+},
+```
+
+In the `Weather.MVC` application, install the `Microsoft.AspNetCore.Authentication.OpenIdConnect` nuget package
+
+```shell
+Install-Package Microsoft.AspNetCore.Authentication.OpenIdConnect -Version 6.0.25
+
+Uninstall-Package Microsoft.AspNetCore.Authentication.OpenIdConnect
+```
+
+Open `Program.cs` file configure authentication
+
+Program.cs
+
+```cs
+builder.Services.AddHttpClient();
+builder.Services.Configure<IdentityServerSettings>(builder.Configuration.GetSection("IdentityServerSettings"));
+builder.Services.AddSingleton<ITokenService, TokenService>();
+
+// begin add
+builder.Services
+    .AddAuthentication(options =>
+    {
+        options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+    })
+    .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddOpenIdConnect(OpenIdConnectDefaults.AuthenticationScheme, options =>
+    {
+        options.Authority = builder.Configuration["InteractiveServiceSettings:AuthorityUrl"];
+        options.ClientId = builder.Configuration["InteractiveServiceSettings:ClientId"];
+        options.ClientSecret = builder.Configuration["InteractiveServiceSettings:ClientSecret"];
+        options.Scope.Add(builder.Configuration["InteractiveServiceSettings:Scopes:0"]);
+
+        options.ResponseType = "code";
+        options.UsePkce = true;
+        options.ResponseMode = "query";
+        options.SaveTokens = true;
+    });
+// end add
+
+
+app.UseRouting();
+
+// begin add
+app.UseAuthentication();
+// end add
+app.UseAuthorization();
+```
+
+So now that we have client authentication setup, the client will be able to access certain scopes.
+And as part of this authentication, it will get back an access token.
+
+Now that we are getting back an access token as part of our user authentication, we no longer need to use the TokenService to get the token.
+
+So update the Weather action method in `HomeController.cs` to get the token from the http context:
+
+```cs
+[Authorize]
+public async Task<IActionResult> Weather()
+{
+    var httpClient = _httpClientFactory.CreateClient();
+
+    var token = await HttpContext.GetTokenAsync("access_token");
+    if (token != null)
+    {
+        httpClient.SetBearerToken(token);
+    }
+    // var token = await _tokenService.GetTokenAsync("scope1");
+    // if (token.AccessToken != null)
+    // {
+    //     httpClient.SetBearerToken(token.AccessToken);
+    // }
+
+    var httpResponseMessage = await httpClient.GetAsync("https://localhost:7074/weatherforecast");
+    if (httpResponseMessage.IsSuccessStatusCode)
+    {
+        using var contentStream = await httpResponseMessage.Content.ReadAsStreamAsync();
+        var result = await JsonSerializer.DeserializeAsync<IEnumerable<WeatherData>>(contentStream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        return View(result);
+    }
+
+    throw new Exception("Unable to get content");
+}
+```
