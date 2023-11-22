@@ -5,19 +5,16 @@ using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics;
 using System.Text.Json;
 using Weather.MVC.Models;
-using Weather.MVC.Services;
 
 namespace Weather.MVC.Controllers;
 
 public class HomeController : Controller
 {
-    private readonly ITokenService _tokenService;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<HomeController> _logger;
 
-    public HomeController(ITokenService tokenService, IHttpClientFactory httpClientFactory, ILogger<HomeController> logger)
+    public HomeController(IHttpClientFactory httpClientFactory, ILogger<HomeController> logger)
     {
-        _tokenService = tokenService;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
@@ -42,11 +39,6 @@ public class HomeController : Controller
         {
             httpClient.SetBearerToken(token);
         }
-        //var token = await _tokenService.GetTokenAsync("scope1");
-        //if (token.AccessToken != null)
-        //{
-        //    httpClient.SetBearerToken(token.AccessToken);
-        //}
 
         var httpResponseMessage = await httpClient.GetAsync("https://localhost:7074/weatherforecast");
         if (httpResponseMessage.IsSuccessStatusCode)

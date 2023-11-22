@@ -604,3 +604,12 @@ public async Task<IActionResult> Weather()
     throw new Exception("Unable to get content");
 }
 ```
+
+Since we no longer get the access token from TokenService, we can delete the following file:
+
+- IdentityServerSettings.cs
+- ITokenService.cs
+- TokenService.cs
+
+And also remove IdentityServerSettings configuration from appsettings.json (or secrets.json)
+as well as remove references to those files in Program.cs and HomeController.cs.
