@@ -7,7 +7,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Duende.IdentityServer.InMem
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Weather.API", "Weather.API\Weather.API.csproj", "{07387315-0D14-4171-B55D-660AF4C13615}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Weather.MVC", "Weather.MVC\Weather.MVC.csproj", "{56A559DB-70AD-44D4-958B-DFEABD950303}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Weather.MVC", "Weather.MVC\Weather.MVC.csproj", "{56A559DB-70AD-44D4-958B-DFEABD950303}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
