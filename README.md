@@ -68,6 +68,18 @@ dotnet new isinmem -o Duende.IdentityServer.InMemory
 open the solution in Visual Studio by double-clicking the `Duende.IdentityServer.Demo1.sln` file.
 add existing project `Duende.IdentityServer.InMemory` to the solution.
 
+uninstall & reinstall existing nuget packages.
+
+```shell
+Uninstall-Package Duende.IdentityServer
+Uninstall-Package Microsoft.AspNetCore.Authentication.Google
+Uninstall-Package Serilog.AspNetCore
+
+Install-Package Duende.IdentityServer.AspNetIdentity -Version 6.3.6
+Install-Package Microsoft.AspNetCore.Authentication.Google -Version 6.0.25
+Install-Package Serilog.AspNetCore -Version 6.1.0
+```
+
 ## Demo 1
 
 let's see if we can get an access token.
@@ -77,7 +89,7 @@ run `Duende.IdentityServer.InMemory`.
 execute the following command in a shell using curl to get an access token
 
 ```shell
-curl -X POST -H "content-type: application/x-www-form-urlencoded" -H "Cache-Control: no-cache" -d "client_id=m2m.client&scope=scope1&client_secret=511536EF-F270-4058-80CA-1C89C192F69A&grant_type=client_credentials" "https://localhost:5001/connect/token"
+curl -X POST -H "content-type: application/x-www-form-urlencoded" -H "Cache-Control: no-cache" -d "client_id=m2m.client&scope=weatherApiScope&client_secret=511536EF-F270-4058-80CA-1C89C192F69A&grant_type=client_credentials" "https://localhost:5001/connect/token"
 ```
 
 or use Postman to get access token
@@ -118,7 +130,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         //the url of IdentityServer
         options.Authority = "https://localhost:5001";
         // name of the audience
-        options.Audience = "weatherapi";
+        options.Audience = "weatherApiResource";
 
         options.TokenValidationParameters.ValidTypes = new[] { "at+jwt" };
     });
@@ -144,9 +156,9 @@ Open `Config.cs` file in `Duende.IdentityServer.InMemory` project and add the fo
 public static IEnumerable<ApiResource> ApiResources =>
     new ApiResource[]
     {
-        new("weatherapi")
+        new("weatherApiResource")
         {
-            Scopes = { "scope1" },
+            Scopes = { "weatherApiScope" },
             ApiSecrets = { new Secret("ScopeSecret".Sha256()) }
         }
     };
@@ -174,7 +186,7 @@ curl -X GET -H "Cache-Control: no-cache" "https://localhost:7074/weatherforecast
 
 ```shell
 # get the token
-curl -X POST -H "content-type: application/x-www-form-urlencoded" -H "Cache-Control: no-cache" -d "client_id=m2m.client&scope=scope1&client_secret=511536EF-F270-4058-80CA-1C89C192F69A&grant_type=client_credentials" "https://localhost:5001/connect/token"
+curl -X POST -H "content-type: application/x-www-form-urlencoded" -H "Cache-Control: no-cache" -d "client_id=m2m.client&scope=weatherApiScope&client_secret=511536EF-F270-4058-80CA-1C89C192F69A&grant_type=client_credentials" "https://localhost:5001/connect/token"
 
 # replace <ADDTOKENHERE> w/ the access token
 curl -X GET -H "Authorization: Bearer <ADDTOKENHERE>" -H "Cache-Control: no-cache" "https://localhost:7074/weatherforecast"
@@ -453,7 +465,7 @@ public class HomeController : Controller
     {
         var httpClient = _httpClientFactory.CreateClient();
 
-        var token = await _tokenService.GetTokenAsync("scope1");
+        var token = await _tokenService.GetTokenAsync("weatherApiScope");
         if (token.AccessToken != null)
         {
             httpClient.SetBearerToken(token.AccessToken);
@@ -491,14 +503,12 @@ Then open `appsettings.json` file in the mvc app and add the following configura
     "AuthorityUrl": "https://localhost:5001",
     "ClientId": "interactive",
     "ClientSecret": "49C1A7E1-0C79-4A89-A3D6-A37998FB86B0",
-    "Scopes": [
-      "scope1"
-    ]
+    "Scopes": ["weatherApiScope"]
   },
 }
 ```
 
-Open `Config.cs` file in `Duende.IdentityServer.InMemory` add edit the ports for the interactive client to match the port of the MVC web app (port 7267). Also, make sure `scope1` is included in the AllowedScopes:
+Open `Config.cs` file in `Duende.IdentityServer.InMemory` add edit the ports for the interactive client to match the port of the MVC web app (port 7267). Also, make sure `weatherApiScope` is included in the AllowedScopes:
 
 Config.cs
 
@@ -517,7 +527,7 @@ new Client
     PostLogoutRedirectUris = { "https://localhost:7267/signout-callback-oidc" },
 
     AllowOfflineAccess = true,
-    AllowedScopes = { "openid", "profile", "scope1" }
+    AllowedScopes = { IdentityServerConstants.StandardScopes.OpenId, IdentityServerConstants.StandardScopes.Profile, "weatherApiScope" }
 },
 ```
 
@@ -587,7 +597,7 @@ public async Task<IActionResult> Weather()
     {
         httpClient.SetBearerToken(token);
     }
-    // var token = await _tokenService.GetTokenAsync("scope1");
+    // var token = await _tokenService.GetTokenAsync("weatherApiScope");
     // if (token.AccessToken != null)
     // {
     //     httpClient.SetBearerToken(token.AccessToken);

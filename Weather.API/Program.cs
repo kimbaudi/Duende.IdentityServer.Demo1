@@ -14,7 +14,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     {
         //the url of IdentityServer
         options.Authority = "https://localhost:5001";
-        options.Audience = "weatherapi";
+        options.Audience = "weatherApiResource";
 
         options.TokenValidationParameters.ValidTypes = new[] { "at+jwt" };
     });
