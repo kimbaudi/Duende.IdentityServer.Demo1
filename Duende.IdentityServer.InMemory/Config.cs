@@ -14,7 +14,7 @@ public static class Config
     public static IEnumerable<ApiScope> ApiScopes =>
         new ApiScope[]
         {
-            new("weatherApiScope"),
+            new("weatherApiScope", "Weather API Scope"),
         };
 
     public static IEnumerable<Client> Clients =>

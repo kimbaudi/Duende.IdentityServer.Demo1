@@ -80,6 +80,74 @@ Install-Package Microsoft.AspNetCore.Authentication.Google -Version 6.0.25
 Install-Package Serilog.AspNetCore -Version 6.1.0
 ```
 
+first, update `Config.cs` file to the following.
+we are basically creating an api scope called `weatherApiScope`, then setting that as the allowed scope in our clients.
+we are also creating an api resource called `weatherApiResource` and setting the scope as `weatherApiScope`.
+
+Config.cs
+
+```cs
+using Duende.IdentityServer.Models;
+
+namespace Duende.IdentityServer.InMemory;
+
+public static class Config
+{
+    public static IEnumerable<IdentityResource> IdentityResources =>
+        new IdentityResource[]
+        {
+            new IdentityResources.OpenId(),
+            new IdentityResources.Profile(),
+        };
+
+    public static IEnumerable<ApiScope> ApiScopes =>
+        new ApiScope[]
+        {
+            new("weatherApiScope", "Weather API Scope"),
+        };
+
+    public static IEnumerable<Client> Clients =>
+        new Client[]
+        {
+            // m2m client credentials flow client
+            new() {
+                ClientId = "m2m.client",
+                ClientName = "Client Credentials Client",
+
+                AllowedGrantTypes = GrantTypes.ClientCredentials,
+                ClientSecrets = { new Secret("511536EF-F270-4058-80CA-1C89C192F69A".Sha256()) },
+
+                AllowedScopes = { "weatherApiScope" }
+            },
+
+            // interactive client using code flow + pkce
+            new() {
+                ClientId = "interactive",
+                ClientSecrets = { new Secret("49C1A7E1-0C79-4A89-A3D6-A37998FB86B0".Sha256()) },
+
+                AllowedGrantTypes = GrantTypes.Code,
+
+                RedirectUris = { "https://localhost:7267/signin-oidc" },
+                FrontChannelLogoutUri = "https://localhost:7267/signout-oidc",
+                PostLogoutRedirectUris = { "https://localhost:7267/signout-callback-oidc" },
+
+                AllowOfflineAccess = true,
+                AllowedScopes = { IdentityServerConstants.StandardScopes.OpenId, IdentityServerConstants.StandardScopes.Profile, "weatherApiScope" }
+            },
+        };
+
+    public static IEnumerable<ApiResource> ApiResources =>
+        new ApiResource[]
+        {
+            new("weatherApiResource")
+            {
+                Scopes = { "weatherApiScope" },
+                ApiSecrets = { new Secret("ScopeSecret".Sha256()) }
+            }
+        };
+}
+```
+
 ## Demo 1
 
 let's see if we can get an access token.
@@ -116,7 +184,7 @@ Install-Package Microsoft.AspNetCore.Authentication.JwtBearer -Version 6.0.25
 Uninstall-Package Microsoft.AspNetCore.Authentication.JwtBearer
 ```
 
-Next, edit `Program.cs` and configure authentication
+Next, edit `Program.cs` in Weather.API and configure authentication
 
 Program.cs
 
@@ -150,21 +218,7 @@ app.UseAuthorization();
 app.MapControllers();
 ```
 
-Open `Config.cs` file in `Duende.IdentityServer.InMemory` project and add the following:
-
-```cs
-public static IEnumerable<ApiResource> ApiResources =>
-    new ApiResource[]
-    {
-        new("weatherApiResource")
-        {
-            Scopes = { "weatherApiScope" },
-            ApiSecrets = { new Secret("ScopeSecret".Sha256()) }
-        }
-    };
-```
-
-Then open `Program.cs` file in `Duende.IdentityServer.InMemory` project and add the following:
+Open `HostingExtensions.cs` file in `Duende.IdentityServer.InMemory` project and add the following:
 
 ```cs
 // in-memory, code config
@@ -508,7 +562,7 @@ Then open `appsettings.json` file in the mvc app and add the following configura
 }
 ```
 
-Open `Config.cs` file in `Duende.IdentityServer.InMemory` add edit the ports for the interactive client to match the port of the MVC web app (port 7267). Also, make sure `weatherApiScope` is included in the AllowedScopes:
+Open `Config.cs` file in `Duende.IdentityServer.InMemory` and edit the ports for the interactive client to match the port of the MVC web app (port 7267). Also, make sure `weatherApiScope` is included in the AllowedScopes:
 
 Config.cs
 
