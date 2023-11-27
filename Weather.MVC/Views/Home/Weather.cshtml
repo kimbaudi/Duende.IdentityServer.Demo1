@@ -1,18 +1,21 @@
-﻿@model IEnumerable<WeatherData>
+﻿@model IEnumerable<WeatherData>?
 @{
-    ViewData["Title"] = "Weather Page";
+    ViewData["Title"] = "Weather";
 }
 
-<h2>Weather</h2>
+<h2>@ViewData["Title"]</h2>
 
-<table>
-    @foreach (var item in Model)
-    {
-        <tr>
-            <td>@item.Date</td>
-            <td>@item.Summary</td>
-            <td>@item.TemperatureC</td>
-            <td>@item.TemperatureF</td>
-        </tr>
-    }
-</table>
+@if (Model != null)
+{
+    <table>
+        @foreach (var item in Model)
+        {
+            <tr>
+                <td>@item.Date</td>
+                <td>@item.Summary</td>
+                <td>@item.TemperatureC</td>
+                <td>@item.TemperatureF</td>
+            </tr>
+        }
+    </table>
+}

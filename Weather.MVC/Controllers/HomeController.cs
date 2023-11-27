@@ -1,5 +1,7 @@
 ﻿using IdentityModel.Client;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics;
@@ -8,6 +10,7 @@ using Weather.MVC.Models;
 
 namespace Weather.MVC.Controllers;
 
+[Route("")]
 public class HomeController : Controller
 {
     private readonly IHttpClientFactory _httpClientFactory;
@@ -19,17 +22,21 @@ public class HomeController : Controller
         _logger = logger;
     }
 
+    [Route("")]
     public IActionResult Index()
     {
         return View();
     }
 
-    public IActionResult Privacy()
+    [Authorize]
+    [Route("Client")]
+    public IActionResult Client()
     {
         return View();
     }
 
     [Authorize]
+    [Route("Weather")]
     public async Task<IActionResult> Weather()
     {
         var httpClient = _httpClientFactory.CreateClient();
@@ -51,6 +58,27 @@ public class HomeController : Controller
         throw new Exception("Unable to get content");
     }
 
+    [Route("Privacy")]
+    public IActionResult Privacy()
+    {
+        return View();
+    }
+
+    [Route("Login")]
+    public async Task Login(string? returlUrl = null)
+    {
+        var props = new AuthenticationProperties { RedirectUri = returlUrl };
+
+        await HttpContext.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme, props);
+    }
+
+    [Route("Signout")]
+    public IActionResult Signout()
+    {
+        return SignOut(CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme);
+    }
+
+    [Route("Error")]
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public IActionResult Error()
     {
